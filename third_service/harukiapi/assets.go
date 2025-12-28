@@ -1,0 +1,68 @@
+package harukiapi
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"lunabot/xmlq/server/global"
+	"lunabot/xmlq/server/utils"
+	"net/http"
+	"net/url"
+	"slices"
+	"strings"
+)
+
+type AssetsService struct{}
+
+// 使用路由参数*path获取的path前自带/
+func (hrk *AssetsService) DownloadAssets(ctx context.Context, BaseUrl, Path string) (resp *http.Response, err error) {
+	if BaseUrl == "" {
+		return nil, errors.New("没有配置 Haruki Sekai Assets 的 Base Url")
+	}
+
+	// 移除 _rip
+	Path = strings.ReplaceAll(Path, "_rip", "")
+	// 谱面文件添加 .txt
+	if strings.Contains(Path, "music_score") {
+		Path = Path + ".txt"
+	}
+	//  .asset改为.json
+	Path = strings.Replace(Path, ".asset", ".json", 1)
+	// 去掉前缀
+	Path = strings.TrimPrefix(Path, "/")
+	// 添加类别
+	category := "ondemand"
+	if slices.ContainsFunc(
+		global.CONFIG.Assets.OndemandPrefixes,
+		func(prefix string) bool {
+			return strings.HasPrefix(Path, prefix)
+		}) {
+		category = "ondemand"
+	} else if slices.ContainsFunc(
+		global.CONFIG.Assets.StartAppPrefixes,
+		func(prefix string) bool {
+			return strings.HasPrefix(Path, prefix)
+		}) {
+		category = "startapp"
+	} else {
+		global.LOG.Warn(fmt.Sprintf("在startapp和ondemand都找不到：%s", Path))
+	}
+	Url, err := url.JoinPath(BaseUrl, category, Path)
+	if err != nil {
+		return
+	}
+	global.LOG.Debug(Url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, Url, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Accept-Language", "en")
+	result, err := utils.HttpRequest(
+		req,
+		utils.DataTypeNone,
+	)
+	if err == nil {
+		resp = result.(*http.Response)
+	}
+	return
+}

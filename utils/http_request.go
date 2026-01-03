@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -19,15 +20,22 @@ var (
 )
 
 type HttpError struct {
-	Status  int    `json:"status"`
-	Message string `json:"message"`
+	Status int    
+	Url    string 
+	Detail string 
 }
 
 func (he *HttpError) Error() string {
 	if he == nil {
 		return "未知错误"
 	}
-	return fmt.Sprintf("%d: %s", he.Status, he.Message)
+	return fmt.Sprintf("%d: %s", he.Status, he.Detail)
+}
+
+var HTTP_ERROR = &HttpError{}
+
+func (*HttpError) Is(err error) bool {
+	return err == HTTP_ERROR
 }
 
 // DataTypeNone 返回Response
@@ -39,6 +47,15 @@ func HttpRequest(
 	if hc == nil {
 		hc = &http.Client{
 			Transport: &http.Transport{
+				// 整个连接池对所有主机的最大空闲连接数
+				MaxIdleConns: 100,
+				// 每个目标主机（Host）保持的最大空闲连接数
+				MaxIdleConnsPerHost: 20,
+				// 连接空闲多久后关闭
+				IdleConnTimeout: 90 * time.Second,
+				// 握手超时
+				TLSHandshakeTimeout: 30 * time.Second,
+				// 跳过tls验证， 危险，可能会受到中间人攻击
 				TLSClientConfig: &tls.Config{
 					InsecureSkipVerify: true,
 				},
@@ -54,11 +71,12 @@ func HttpRequest(
 		defer resp.Body.Close()
 	}
 	if resp.StatusCode != http.StatusOK {
-		var httpError HttpError
-		_ = json.NewDecoder(resp.Body).Decode(&httpError)
-		if httpError.Status == 0 {
-			httpError.Status = resp.StatusCode
+		httpError := HttpError{
+			Status: resp.StatusCode,
+			Url:    Req.URL.String(),
 		}
+		detail, _ := io.ReadAll(resp.Body)
+		httpError.Detail = string(detail)
 		return nil, &httpError
 	}
 	switch DataType {

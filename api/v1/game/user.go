@@ -141,7 +141,10 @@ func (*UserApi) GetSuiteUploadTime(c *gin.Context) {
 		return
 	}
 	idTime, localErr := suiteService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
-	localUploadTime := idTime[userInfo.UserId]
+	localUploadTime, ok := idTime[userInfo.UserId]
+	if !ok {
+		localErr = fmt.Errorf("本地没有 %s 的 suite 数据", userInfo.UserId)
+	}
 	if localErr != nil {
 		global.LOG.Error("获取本地的 suite 上传时间失败", zap.Error(localErr))
 	}
@@ -274,7 +277,10 @@ func (*UserApi) GetMysekaiUploadTime(c *gin.Context) {
 		return
 	}
 	idTime, localErr := mysekaiService.GetUploadTime(c, userInfo.Region, userInfo.UserId)
-	localUploadTime := idTime[userInfo.UserId]
+	localUploadTime, ok := idTime[userInfo.UserId]
+	if !ok {
+		localErr = fmt.Errorf("本地没有 %s 的 suite 数据", userInfo.UserId)
+	}
 	if localErr != nil {
 		global.LOG.Error(fmt.Sprintf("获取 %s 本地的 mysekai 上传时间失败", userInfo.UserId), zap.Error(localErr))
 	}
